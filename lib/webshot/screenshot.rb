@@ -95,5 +95,50 @@ module Webshot
         raise WebshotError.new("Capybara error: #{e.message.inspect}")
       end
     end
+
+    # Captures a screenshot of +url+ saving it to +path+.
+    def capture_and_return_io(url, opts = {})
+      begin
+        # Default settings
+        width   = opts.fetch(:width, 120)
+        height  = opts.fetch(:height, 90)
+        gravity = opts.fetch(:gravity, "north")
+        quality = opts.fetch(:quality, 85)
+        full = opts.fetch(:full, true)
+        selector = opts.fetch(:selector, nil)
+        allowed_status_codes = opts.fetch(:allowed_status_codes, [])
+
+        # Reset session before visiting url
+        Capybara.reset_sessions! unless @session_started
+        @session_started = false
+
+        # Open page
+        visit url
+
+        # Timeout
+        sleep opts[:timeout] if opts[:timeout]
+
+        # Check response code
+        status_code = page.driver.status_code.to_i
+        unless valid_status_code?(status_code, allowed_status_codes)
+          fail WebshotError, "Could not fetch page: #{url.inspect}, error code: #{page.driver.status_code}"
+        end
+
+        tmp = Tempfile.new(["webshot", ".png"])
+        tmp.close
+
+        screenshot_opts = { full: full }
+        screenshot_opts = screenshot_opts.merge({ selector: selector }) if selector
+
+        # Save screenshot to file
+        page.driver.save_screenshot(tmp.path, screenshot_opts)
+
+        tmp
+      rescue Capybara::Poltergeist::StatusFailError, Capybara::Poltergeist::BrowserError, Capybara::Poltergeist::DeadClient, Capybara::Poltergeist::TimeoutError, Errno::EPIPE => e
+        # TODO: Handle Errno::EPIPE and Errno::ECONNRESET
+        raise WebshotError.new("Capybara error: #{e.message.inspect}")
+      end
+    end
+
   end
 end
